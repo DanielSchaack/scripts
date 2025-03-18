@@ -1,47 +1,58 @@
 #!/bin/bash
-BROWSER="chromium"
 
 usage() {
     echo "Usage: $0 [OPTIONS] [ARGUMENTS...]"
     echo "Options:"
-    echo "  -h, --help              Show this help message"
-    echo "  -su, --setup DRIVER     Either 'nvidia' or 'amd'. Installs podman and required packages for ollama GPU usage and open-webui"
-    echo "  -s, --start BROWSER     Default: BROWSER=chromium. Start open-webui and ollama, and opens a window in BROWSER"
-    echo "  -e, --end               Stops open-webui and ollama"
-    echo "  -u, --upgrade           Stops and deletes open-webui and ollama, pulls new versions from main"
+    echo "  -h                 Show this help message"
+    echo "  -i DRIVER          Install podman and required packages for Ollama GPU usage and Open-WebUI."
+    echo "                     DRIVER must be 'nvidia' or 'amd'."
+    echo "  -s                 Do not start Open-WebUI and Ollama. Opens a window in BROWSER (currently: chromium)."
+    echo "  -S                 Start Open-WebUI and Ollama in a chosen BROWSER (default: chromium)."
+    echo "  -e                 Stop Open-WebUI and Ollama."
+    echo "  -u                 Upgrade Open-WebUI and Ollama by stopping, deleting, and pulling new versions from main."
 }
 
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -h | --help)
-            usage
-            exit 0
-            ;;
-        -su | --setup)
-            SETUP=true
-            DRIVER="$2"
-            shift
-            shift
-            ;;
-        -s | --start)
-            START=true
-            if [[ ! -z "$2" ]];then
-                BROWSER="$2"
-            fi
-            shift
-            shift
-            ;;
-        -e | --end)
-            END=true
-            shift
-            ;;
-        -u | --upgrade)
-            UPGRADE=true
-            shift
-            ;;
-    esac
+BROWSER="chromium"
+START=true
+
+while getopts ":hi:sS:eu" opt; do
+  case ${opt} in
+    h ) 
+      usage
+      exit 0
+      ;;
+    i ) 
+      SETUP=true
+      DRIVER="$OPTARG"
+      ;;
+    s ) 
+      START=false
+      ;;
+    S ) 
+      START=true
+      BROWSER="${OPTARG:-chromium}"
+      ;;
+    e ) 
+      START=false
+      END=true
+      ;;
+    u ) 
+      UPGRADE=true
+      ;;
+    \? ) 
+      echo "Invalid option: -$OPTARG" >&2
+      usage
+      exit 1
+      ;;
+  esac
 done
 
+shift $((OPTIND - 1))
+
+sleep_and_open_browser(){
+    sleep 10
+    "$BROWSER" "127.0.0.1:3000"
+}
 
 if [[ $SETUP ]]; then
     case $DRIVER in
@@ -55,10 +66,10 @@ if [[ $SETUP ]]; then
             ;;
         "amd")
             echo "Not yet implemented"
-            sudo pacman -Sy podman
-            yay -Sy nvidia-container-toolkit
-            podman network create llm
-            podman run -d -p 127.0.0.1:3000:8080 --network=llm -e WEBUI_AUTH=False -e ENABLE_SIGNUP=false -e OLLAMA_BASE_URL=http://ollama:11434 -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:main
+            # sudo pacman -Sy podman
+            # yay -Sy nvidia-container-toolkit
+            # podman network create llm
+            # podman run -d -p 127.0.0.1:3000:8080 --network=llm -e WEBUI_AUTH=False -e ENABLE_SIGNUP=false -e OLLAMA_BASE_URL=http://ollama:11434 -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:main
             # podman run -d --name ollama --gpus all -v ollama:/root/.ollama --network=llm -p 127.0.0.1:11434:11434 ollama/ollama
             ;;
         *)
@@ -97,8 +108,7 @@ if [[ "$START" = true ]]; then
     fi
 
     echo "Waiting 10 seconds for the containers to properly start"
-    sleep 10
-    "$BROWSER" "127.0.0.1:3000"
+    sleep_and_open_browser &
 fi
 
 if [[ "$END" = true ]]; then

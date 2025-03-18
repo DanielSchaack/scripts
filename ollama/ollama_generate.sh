@@ -1,24 +1,57 @@
 #!/bin/bash
 
-cleanup() {
-    deactivate
+TASK="autocorrect"
+MODE="buffered"
+
+usage() {
+    echo "Usage: $0 [-h] [-t TASK] [-m MODE]"
+    echo "Options:"
+    echo " -h                 Show this help message"
+    echo " -t TASK            The task to perform (default: autocorrect)"
+    echo " -m MODE            The mode to use (default: buffered)"
 }
 
-if [ -z "$1" ]; then
-    echo "Error: First argument is missing."
-    exit 1
-fi
+while getopts ":hm:t:" opts; do
+    case ${opts} in
+        h )
+            usage
+            exit 0
+            ;;
+        t )
+            TASK="$OPTARG"
+            ;;
+        m )
+            MODE="$OPTARG"
+            ;;
+        \? )
+            echo "Invalid option: -$OPTARG" >&2
+            usage
+            exit 1
+            ;;
+        : )
+            echo "Option -$OPTARG requires an argument." >&2
+            usage
+            exit 1
+            ;;
+    esac
+done
 
-if [ -z "$2" ]; then
-    echo "Error: Second argument is missing."
-    exit 1
-fi
+shift $((OPTIND - 1))
 
 file_path=$(dirname $(readlink -f $BASH_SOURCE))
 
-source $file_path/venv/bin/activate
-while read input; do
-    python3 -u $file_path/ollama_generate.py "$1" "$2" "$input"
-done
-cleanup
+cd "$file_path"
+if [[ ! -d "./venv" ]]; then
+    python -m venv ./venv
+    source ./venv/bin/activate
+    pip install -r ./requirements.txt
+    deactivate
+fi
 
+source ./venv/bin/activate
+while read -r -p "Input to be worked on: " input; do
+    [[ -z "$input" ]] && continue
+    python3 -u ./ollama_generate.py "$TASK" "$MODE" "$input"
+done
+deactivate
+cd - #> /dev/null
