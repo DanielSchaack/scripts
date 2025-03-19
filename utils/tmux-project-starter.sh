@@ -4,54 +4,58 @@ dir="$HOME"
 py_version=""
 
 usage() {
-    echo "Usage: $0 [OPTIONS] [ARGUMENTS...]"
+    echo "Usage: $0 [-h] [-H] [-d directory] [-p [python_version]]"
     echo "Options:"
-    echo "  -h, --help              Show this help message"
-    echo "  --hidden                Adds hidden directory and files to the search. Careful - 'Pollutes' the search unless ~/.fdignore or $HOME/.config/fd/ignore are setup"
-    echo "  -d, --directory         Adjust the starting directory from HOME to the provided one"
-    echo "  -p, --python    VERSION Activates venv of chosen directory. Creates one if missing. If a version is provided, use virtualenv to adjust venv to version"
+    echo "  -h                  Show this help message"
+    echo "  -H                  Include hidden directories and files in the search."
+    echo "                      (Careful: This may 'pollute' results unless ~/.fdignore or \$HOME/.config/fd/ignore are set up)"
+    echo "  -d DIRECTORY        Set the starting directory (default: HOME)"
+    echo "  -p                  Activate virtual environment in the chosen directory."
+    echo "  -P [VERSION]        Activate virtual environment with the given python version in the chosen directory."
+    echo "                      If a version is provided, virtualenv will adjust the venv to that version."
 }
 
-setup_python(){
-    if [[ ! -z "$1" ]]; then
-        tmux send-keys -t $last_directory:editor "virtualenv -p $1 venv; tmux wait -S venv" C-m
-        tmux wait venv
-    fi
-    if [[ ! -d "$selected/venv" ]]; then
-        tmux send-keys -t $last_directory:editor "python -m venv venv; tmux wait -S venv" C-m
-        tmux wait venv
-    fi
-    tmux send-keys -t $last_directory:editor "source venv/bin/activate" C-m
-}
-
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -h | --help)
+while getopts ":hHd:pP::" opt; do
+    case ${opt} in
+        h ) 
             usage
             exit 0
             ;;
-        --hidden)
+        H )
             hidden="--hidden"
-            shift
             ;;
-        -d | --directory)
-            if [[ ! -z "$2" ]];then
-                dir="$2"
-            fi
-            shift
-            shift
+        d ) 
+            dir="$OPTARG"
             ;;
-        -p | --python)
+        p ) 
             is_python=true
-            if [[ ! -z "$2" ]];then
-                py_version="$2"
-            fi
-            shift
-            shift
+            ;;
+        P ) 
+            is_python=true
+            py_version="${OPTARG:-}"
+            ;;
+        \? ) 
+            echo "Invalid option: -$OPTARG" >&2
+            usage
+            exit 1
             ;;
     esac
 done
 
+shift $((OPTIND - 1))
+
+setup_python(){
+    if [[ ! -d "$selected/venv" ]]; then
+        if [[ ! -z "$1" ]]; then
+            tmux send-keys -t $last_directory:editor "virtualenv -p $1 venv; tmux wait -S venv" C-m
+            tmux wait venv
+        else
+            tmux send-keys -t $last_directory:editor "python -m venv venv; tmux wait -S venv" C-m
+            tmux wait venv
+        fi
+    fi
+    tmux send-keys -t $last_directory:editor "source venv/bin/activate" C-m
+}
 selected=$(fd --type d --follow $hidden -E .git -E yay . $dir | fzf) || exit
 
 echo "Directory as project to start: $selected"
@@ -67,7 +71,8 @@ if [[ $? != 0 ]]; then # if no session with dir name
         setup_python $py_version
     fi
 
-    tmux send-keys -t $last_directory:editor.1 "tmux split-window -h -p 25" C-m
+    tmux send-keys -t $last_directory:editor.1 "tmux split-window -h -p 25; tmux wait -S pane" C-m
+    tmux wait pane
     if [[ "$is_python" == "true" ]]; then
         setup_python
     fi
